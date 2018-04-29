@@ -1,13 +1,16 @@
 const fs = require('fs')
 const request = require('request')
 const record = require('node-record-lpcm16')
+const requestHandler = require('./request-handler')
 const { Detector, Models } = require('snowboy')
 const models = new Models()
 const witToken = process.env.WIT_TOKEN
 
-const hotwordThreshold = 1000 // How long silence should be polled before ending recording
+const hotwordThreshold = 2000 // How long silence should be polled before ending recording
 let hotwordTimeout = null // Global variable to house setTimeout of command recording
 let isRecording = false // If command should be recorded or not
+
+let timers = []
 
 // import keyword models
 models.add({
@@ -38,20 +41,20 @@ detector.on('hotword', (index, hotword, buffer) => {
         threshold: 0,
         verbose: false
     }).pipe(request.post({
-        'url': 'https://api.wit.ai/speech?client=chromium&lang=en-us&ouput=json',
+        'url': 'https://api.wit.ai/speech?v=20170307',
         'headers': {
-            'Accept'        : 'application/vnd.wit.20160202+json',
             'Authorization' : 'Bearer ' + witToken,
             'Content-Type'  : 'audio/wav'
         }
     }, (err, res, body) => {
+
+        // Send response to {requestHandler}
         if (err) throw err
-        console.log(body)
+        if (res.statusCode === 200) { requestHandler(JSON.parse(body)) }
     }))
 })
 
 detector.on('silence', () => {
-    console.log('silence')
 
     // Start silence timeout to stop recording of command if
     // recording and the timeout has not already been started
@@ -66,7 +69,6 @@ detector.on('silence', () => {
 })
 
 detector.on('sound', (buffer) => {
-    console.log('sound')
 
     // If talking is resumed before the timeout is completed
     // the timeout is reset for the duration of {hotwordThreshhold}
